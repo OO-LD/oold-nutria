@@ -1,0 +1,68 @@
+# coregraft's own task runner. Instances get their Makefile from
+# profiles/<name>/; this one lints and tests the template repository itself.
+
+# --- init (template bootstrap; removed by `make init`) ---
+.PHONY: init
+init: ## Personalise this repository (first run after "Use this template")
+	@uv run scripts/init.py
+	@# The profile's Makefile is in place by now, so this re-invocation picks up
+	@# its `install` target. Creating the environment here is not a convenience:
+	@# `make check` starts with `uv lock --locked`, so without a committed
+	@# uv.lock the very first push of a new repository fails CI.
+	@$(MAKE) --no-print-directory install
+	@# printf, not echo: echo expands the \a in the Windows path to a bell.
+	@printf '\n✅ Ready. Activate the environment with:\n'
+	@printf '     %s\n' 'source .venv/bin/activate   (macOS, Linux)'
+	@printf '     %s\n' '.venv\Scripts\activate      (Windows)'
+	@printf '   Or prefix commands with "uv run". Then review and commit.\n'
+# --- end init ---
+
+.PHONY: install
+install: ## Install the virtual environment and the pre-commit hooks
+	@echo "🚀 Creating virtual environment using uv"
+	@uv sync
+	@uv run pre-commit install
+
+.PHONY: check
+check: ## Run code quality tools
+	@echo "🚀 Checking lock file consistency with 'pyproject.toml'"
+	@uv lock --locked
+	@echo "🚀 Linting code: Running pre-commit"
+	@uv run pre-commit run --files $$(git ls-files --cached --others --exclude-standard)
+	@echo "🚀 Static type checking: Running ty"
+	@uv run ty check
+
+.PHONY: test
+test: ## Run the template integrity tests
+	@echo "🚀 Testing the template: Running pytest"
+	@uv run python -m pytest
+
+.PHONY: docs-test
+docs-test: ## Test if documentation can be built without warnings or errors
+	@uv run zensical build -s
+
+.PHONY: docs
+docs: ## Build and serve the documentation
+	@uv run zensical serve
+
+.PHONY: instances
+instances: ## List repositories grown from this template and their version
+	@GH_TOKEN=$${GH_TOKEN:-$$(gh auth token)} uv run scripts/track_instances.py --owner $${OWNER:-OO-LD}
+
+.PHONY: ci
+ci: check test docs-test ## Run everything CI runs, before pushing
+	@# Name the branch: `make ci` is the last thing run before pushing, and a
+	@# green gate on the wrong branch is an easy mistake to make.
+	@branch=$$(git branch --show-current 2>/dev/null); \
+		if [ -n "$$branch" ]; then \
+			echo "✅ Ready to push on branch '$$branch'"; \
+		else \
+			echo "✅ Ready to push"; \
+		fi
+
+.PHONY: help
+help:
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
+		| awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-12s\033[0m %s\n", $$1, $$2}'
+
+.DEFAULT_GOAL := help

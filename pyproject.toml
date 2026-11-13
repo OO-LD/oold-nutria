@@ -1,0 +1,135 @@
+# coregraft's own project file. It lints and tests the template repository
+# itself; the pyproject an instance receives lives in profiles/<name>/ and is
+# put in place by `make init`.
+[project]
+name = "coregraft"
+description = "Profiled GitHub template with full automation from commit to release"
+authors = [{ name = "OO-LD", email = "team@opensemantic.world" }]
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+keywords = ["template", "github-template", "copier", "uv", "semantic-release"]
+requires-python = ">=3.10,<4.0"
+# Managed by python-semantic-release from conventional commits, together with
+# TEMPLATE_VERSION. Do not edit by hand.
+version = "0.12.0"
+
+[project.urls]
+Repository = "https://github.com/OO-LD/coregraft"
+
+# coregraft is not a distributable package: there is no build backend and
+# nothing to install. uv manages only the dev environment below.
+[tool.uv]
+package = false
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.0.0",
+    "pytest>=8.0.0",
+    "python-semantic-release>=10.0.0",
+    "ty>=0.0.1a21",
+    "zensical>=0.0.46",
+    # docs versioning: zensical-compatible mike fork (same pin as OO-LD/oold-schema)
+    "mike @ git+https://github.com/squidfunk/mike.git@2.2.0+zensical-0.1.0",
+    "copier>=9.10.0",
+]
+
+[tool.semantic_release]
+# python-semantic-release owns the version and changelog. On merge to main it
+# reads the conventional commits, bumps the static version in the files below,
+# updates the changelog, commits, and tags. The v-prefixed tags are also what
+# `copier update` resolves template versions against.
+commit_parser = "conventional"
+tag_format = "v{version}"
+# [skip ci] suppresses all push workflows on the release commit (version
+# bumps only); dropping it would re-run CI, docs and a noop release-main.
+commit_message = "chore(release): v{version} [skip ci]"
+allow_zero_version = true
+build_command = "uv lock"
+version_toml = ["pyproject.toml:project.version"]
+# TEMPLATE_VERSION is the instance-facing version marker: `make init` reads it
+# and pins it as `_commit` in .copier-answers.yml.
+version_variables = ["TEMPLATE_VERSION:version"]
+exclude_commit_patterns = ['''chore\(release\):.*''']
+# uv.lock pins coregraft's own version, so re-lock (build_command) and include
+# it in the release commit to keep `uv sync --frozen` consistent on the next run.
+assets = ["uv.lock"]
+
+[tool.semantic_release.changelog]
+mode = "update"
+insertion_flag = "<!-- version list -->"
+
+[tool.semantic_release.changelog.default_templates]
+changelog_file = "CHANGELOG.md"
+
+[tool.ty.environment]
+# macros.py and the scripts/ tools are imported by tests via sys.path, since
+# coregraft is not an installed package.
+extra-paths = [".", "scripts"]
+
+[tool.ty.src]
+# Profile overlays reference instance-only modules; the CI self-test job type
+# checks them inside a generated instance instead.
+exclude = ["profiles"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Tests assert against the assembler's own tables (OPTOUT_FILES), so they must
+# import from scripts/ rather than restating them and drifting.
+pythonpath = ["scripts"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+fix = true
+
+[tool.ruff.lint]
+select = [
+    # flake8-2020
+    "YTT",
+    # flake8-bandit
+    "S",
+    # flake8-bugbear
+    "B",
+    # flake8-builtins
+    "A",
+    # flake8-comprehensions
+    "C4",
+    # flake8-debugger
+    "T10",
+    # flake8-simplify
+    "SIM",
+    # isort
+    "I",
+    # mccabe
+    "C90",
+    # pycodestyle
+    "E", "W",
+    # pyflakes
+    "F",
+    # pygrep-hooks
+    "PGH",
+    # pyupgrade
+    "UP",
+    # ruff
+    "RUF",
+    # tryceratops
+    "TRY",
+]
+ignore = [
+    # LineTooLong: the formatter owns line width
+    "E501",
+    # DoNotAssignLambda
+    "E731",
+    # Avoid specifying long messages outside the exception class: a plain
+    # ValueError with a one-line message is the right size for template
+    # scripts; dedicated exception classes would be ceremony without benefit.
+    "TRY003",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# pytest tests assert on purpose
+"tests/*" = ["S101"]
+
+[tool.ruff.format]
+preview = true
