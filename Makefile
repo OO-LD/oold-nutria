@@ -1,22 +1,3 @@
-# coregraft's own task runner. Instances get their Makefile from
-# profiles/<name>/; this one lints and tests the template repository itself.
-
-# --- init (template bootstrap; removed by `make init`) ---
-.PHONY: init
-init: ## Personalise this repository (first run after "Use this template")
-	@uv run scripts/init.py
-	@# The profile's Makefile is in place by now, so this re-invocation picks up
-	@# its `install` target. Creating the environment here is not a convenience:
-	@# `make check` starts with `uv lock --locked`, so without a committed
-	@# uv.lock the very first push of a new repository fails CI.
-	@$(MAKE) --no-print-directory install
-	@# printf, not echo: echo expands the \a in the Windows path to a bell.
-	@printf '\n✅ Ready. Activate the environment with:\n'
-	@printf '     %s\n' 'source .venv/bin/activate   (macOS, Linux)'
-	@printf '     %s\n' '.venv\Scripts\activate      (Windows)'
-	@printf '   Or prefix commands with "uv run". Then review and commit.\n'
-# --- end init ---
-
 .PHONY: install
 install: ## Install the virtual environment and the pre-commit hooks
 	@echo "🚀 Creating virtual environment using uv"
@@ -31,11 +12,33 @@ check: ## Run code quality tools
 	@uv run pre-commit run --files $$(git ls-files --cached --others --exclude-standard)
 	@echo "🚀 Static type checking: Running ty"
 	@uv run ty check
+	@echo "🚀 Checking for obsolete dependencies: Running deptry"
+	@uv run deptry src
 
 .PHONY: test
-test: ## Run the template integrity tests
-	@echo "🚀 Testing the template: Running pytest"
-	@uv run python -m pytest
+test: ## Test the code with pytest
+	@echo "🚀 Testing code: Running pytest"
+	@uv run python -m pytest --cov --cov-config=pyproject.toml --cov-report=xml
+
+.PHONY: bench
+bench: ## Run the performance benchmarks
+	@echo "🚀 Running benchmarks: pytest-benchmark"
+	@uv run python -m pytest -c pytest.benchmark.ini \
+		--benchmark-autosave --benchmark-json=benchmark_results.json
+.PHONY: build
+build: clean-build ## Build wheel file
+	@echo "🚀 Creating wheel file"
+	@uvx --from build pyproject-build --installer uv
+
+.PHONY: clean-build
+clean-build: ## Clean build artifacts
+	@echo "🚀 Removing build artifacts"
+	@uv run python -c "import shutil; import os; shutil.rmtree('dist') if os.path.exists('dist') else None"
+
+.PHONY: publish
+publish: ## Publish a release to PyPI (CI does this via trusted publishing)
+	@echo "🚀 Publishing."
+	@uvx twine upload --repository-url https://upload.pypi.org/legacy/ dist/*
 
 .PHONY: docs-test
 docs-test: ## Test if documentation can be built without warnings or errors
@@ -44,10 +47,6 @@ docs-test: ## Test if documentation can be built without warnings or errors
 .PHONY: docs
 docs: ## Build and serve the documentation
 	@uv run zensical serve
-
-.PHONY: instances
-instances: ## List repositories grown from this template and their version
-	@GH_TOKEN=$${GH_TOKEN:-$$(gh auth token)} uv run scripts/track_instances.py --owner $${OWNER:-OO-LD}
 
 .PHONY: ci
 ci: check test docs-test ## Run everything CI runs, before pushing

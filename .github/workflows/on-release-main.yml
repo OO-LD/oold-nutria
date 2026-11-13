@@ -1,14 +1,10 @@
-# Automated release for the template repository itself: python-semantic-release
-# reads the conventional commits on main, bumps pyproject.toml and
-# TEMPLATE_VERSION, updates CHANGELOG.md, commits, tags, and a GitHub release
-# is created with generated notes. The tags are what `copier update` resolves
-# template versions against, so releasing is what makes backports possible.
+# Automated release: python-semantic-release reads the conventional commits on
+# main, bumps the version, updates CHANGELOG.md, commits, tags, and a GitHub
+# release is created with generated notes.
 #
-# coregraft is not a distributable package: there is no build and no PyPI
-# publish here. Those steps live in the python profile's release workflow.
-#
-# Requires two repository secrets for the GitHub App that pushes the release
-# commit past the main ruleset: RELEASE_APP_ID and RELEASE_APP_PRIVATE_KEY.
+# One-time setup: a GitHub App with Contents write access to this repository,
+# the RELEASE_APP_ID / RELEASE_APP_PRIVATE_KEY secrets, and a main ruleset the
+# App may bypass. See the coregraft README's Releasing section.
 name: release-main
 
 on:
@@ -21,15 +17,32 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Releasing needs a GitHub App, which is a one-time repository setup. Until
+  # it exists, skip cleanly instead of failing every push on a missing app-id:
+  # a repository that has not opted into releases yet is not broken. `secrets`
+  # cannot be read in a job-level `if`, so it is surfaced as an output here.
+  check-setup:
+    runs-on: ubuntu-latest
+    outputs:
+      configured: ${{ steps.check.outputs.configured }}
+    steps:
+      - id: check
+        env:
+          HAS_APP: ${{ secrets.RELEASE_APP_ID != '' }}
+        run: |
+          echo "configured=$HAS_APP" >> "$GITHUB_OUTPUT"
+          if [ "$HAS_APP" != "true" ]; then
+            echo "No RELEASE_APP_ID secret; skipping the release. See the README's Releasing section." \
+              >> "$GITHUB_STEP_SUMMARY"
+          fi
+
   release:
-    # Only in the template repository itself. "Use this template" copies this
-    # file, and the copy's initial commit ran it before `make init` could
-    # delete it, failing on the App secrets the new repository does not have.
-    # That made every generated repository look broken on arrival.
-    if: github.event.repository.is_template
+    needs: check-setup
+    if: needs.check-setup.outputs.configured == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write   # push the release commit and tag, create the GitHub release
+      id-token: write   # OIDC trusted publishing to PyPI
     outputs:
       released: ${{ steps.version.outputs.released }}
       version: ${{ steps.version.outputs.version }}
@@ -52,8 +65,7 @@ jobs:
         uses: ./.github/actions/setup-python-env
 
       # Release commits are authored by whichever release App this repository
-      # uses (derived from the token, not hardcoded), so history shows who cut
-      # the release and forks with their own App keep their own identity.
+      # uses (derived from the token, not hardcoded).
       - name: Configure git identity
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -69,9 +81,6 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           before=$(git rev-parse HEAD)
-          # PSR bumps files, updates CHANGELOG.md, commits and tags, but does not
-          # create the GitHub release; we create it below with GitHub's generated
-          # "What's Changed" notes (no changelog duplication).
           uv run semantic-release version --no-vcs-release
           after=$(git rev-parse HEAD)
           if [ "$before" != "$after" ]; then
@@ -83,7 +92,17 @@ jobs:
             echo "released=false" >> "$GITHUB_OUTPUT"
             echo "No release for this push."
           fi
+      - name: Build package
+        if: steps.version.outputs.released == 'true'
+        run: uv build
 
+      - name: Check package metadata
+        if: steps.version.outputs.released == 'true'
+        run: uvx twine check dist/*
+
+      - name: Publish to PyPI (OIDC trusted publishing)
+        if: steps.version.outputs.released == 'true'
+        run: uv publish --trusted-publishing always
       - name: Create GitHub release with generated notes
         if: steps.version.outputs.released == 'true'
         env:
@@ -91,16 +110,12 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           gh release create "v$VERSION" --verify-tag --title "v$VERSION" --generate-notes
-          # Append a link to the full grouped changelog (kept in CHANGELOG.md),
-          # so the release has "What's Changed" plus a pointer, no duplication.
           notes=$(gh release view "v$VERSION" --json body -q .body)
           link="Full grouped changelog: [CHANGELOG.md](https://github.com/${GITHUB_REPOSITORY}/blob/v${VERSION}/CHANGELOG.md)"
           gh release edit "v$VERSION" --notes "${notes}"$'\n\n---\n'"${link}"
 
-  # Publish the versioned docs with mike (zensical fork). Serialized with the
-  # dev deploy from docs.yml on one concurrency group so pushes to gh-pages
-  # never race. The full semver is served at /<version>/ with the `latest`
-  # alias as a real directory (--alias-type=copy), and / redirects to latest.
+  # Publish the versioned docs with mike. GitHub Pages must serve from the
+  # gh-pages branch (Settings > Pages > Source: Deploy from a branch).
   deploy-docs:
     needs: release
     if: needs.release.outputs.released == 'true'

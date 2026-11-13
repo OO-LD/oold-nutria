@@ -1,6 +1,6 @@
 """Performance benchmarks; run with `make benchmark`, never with the unit tests."""
 
-from coregraft_example import hello
+from nutria import hello
 
 
 def test_hello_benchmark(benchmark) -> None:

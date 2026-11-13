@@ -1,44 +1,63 @@
-# Contributing
+# Contributing to oold-nutria
 
-Contributions are welcome! You can help by reporting bugs, implementing features, or improving documentation. File issues and PRs at [github.com/OO-LD/coregraft](https://github.com/OO-LD/coregraft).
-
-## Development setup
-
-Requires `uv`, `make` and `git`.
+## Setup
 
 ```bash
-git clone git@github.com:YOUR_NAME/coregraft.git && cd coregraft && make install
+make install
 ```
 
-`make install` creates the environment and installs both the `pre-commit` and `commit-msg` stage hooks; the latter enforces Conventional Commits (see below).
+Creates the virtual environment and installs the git hooks. Run it once after cloning.
 
-## Making changes
+## Before you push
 
-1. Create a branch: `git checkout -b name-of-your-fix`
-2. Make your changes; template behaviour is guarded by the tests in `tests/`
-3. Run the checks: `make check`, `make test` and `make docs-test`
-4. Commit and push, then open a pull request against `main`
+```bash
+make ci
+```
 
-| Target | Does |
-| --- | --- |
-| `make check` | lock consistency, pre-commit hooks, type check |
-| `make test` | template integrity and macro tests |
-| `make docs-test` | strict docs build, fails on any warning |
-| `make docs` | serve the docs with live reload |
+Runs `check`, `test` and `docs-test` in the order CI does, so a green run here means a green run there. See the [README](README.md) for the individual targets.
 
-## Commit messages (Conventional Commits)
+## Commit messages
 
-Commit messages drive versioning and the changelog automatically, so the format matters. The local `commit-msg` hook rejects malformed messages.
+This repository uses [Conventional Commits](https://www.conventionalcommits.org/). This is not a style preference: the version number, the changelog and the release notes are **derived** from these messages, so a wrong type produces a wrong version.
 
-Format: `type(scope): subject`, for example `fix: correct broken profile prune`. The scope is optional.
+```text
+<type>(<optional scope>): <description>
+```
 
-| Type | Release effect | Use for |
-| ---- | -------------- | ------- |
-| `feat` | minor bump | a new feature |
-| `fix`, `perf` | patch bump | a bug fix or performance improvement |
-| `docs`, `chore`, `test`, `refactor`, `ci`, `style`, `build` | no release | changes that do not ship template behaviour |
-| `BREAKING CHANGE:` footer, or `!` after the type | major bump | an incompatible change |
+| Type | Use for | Release effect |
+| --- | --- | --- |
+| `feat` | A new capability | Minor version bump |
+| `fix` | A bug fix | Patch version bump |
+| `docs` | Documentation only | None |
+| `test` | Tests only | None |
+| `refactor` | Behaviour-preserving restructuring | None |
+| `perf` | A performance improvement | Patch version bump |
+| `build` | Build system or dependencies | None |
+| `ci` | CI configuration | None |
+| `chore` | Anything else | None |
 
-## Releasing
+A breaking change is either `feat!:` or a `BREAKING CHANGE:` footer, and bumps the major version.
 
-Releases are fully automated by python-semantic-release; see the [Releasing](README.md#releasing) section of the README. You never tag or bump versions by hand: the version lives in `pyproject.toml` and `TEMPLATE_VERSION`, both maintained by the release workflow.
+Write the description in the imperative and lowercase, with no trailing full stop:
+
+```text
+feat: add a retry policy to the client
+fix(parser): handle an empty payload
+docs: explain the release process
+```
+
+The `commit-msg` hook rejects anything else locally, before it reaches CI. If a commit is refused, fix the message and commit again; nothing was lost.
+
+## Pull requests
+
+Work on a branch and open a pull request. Keep the pull request title conventional too, since a squash merge turns it into the commit message that drives the release.
+
+## Releases
+
+Nothing to do by hand. On merge to `main`, [python-semantic-release](https://python-semantic-release.readthedocs.io/) reads the commits since the last tag, bumps the version, writes `CHANGELOG.md`, tags, and publishes a GitHub release with generated notes. Documentation is published per version at the same time.
+
+If the release workflow reports that it is skipping, this repository has no release App configured yet; see the README.
+
+## Updates from the template
+
+This repository was generated from [coregraft](https://github.com/OO-LD/coregraft) and records the version it came from in `.copier-answers.yml`. A scheduled workflow opens a pull request when the template moves on, replaying template changes on top of your own. Review it like any other pull request, and search for `<<<<<<<` before merging: anything the merge could not resolve is left there deliberately, for a human to decide.

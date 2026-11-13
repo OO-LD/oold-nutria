@@ -15,4 +15,4 @@ COPY . .
 RUN uv sync --frozen --no-dev
 
 ENV PATH="/app/.venv/bin:$PATH"
-CMD ["python", "-c", "import coregraft_example; print(coregraft_example.hello())"]
+CMD ["python", "-c", "import nutria; print(nutria.hello())"]

@@ -1,7 +1,3 @@
-# CI for the template repository itself: lint the configuration and run the
-# template integrity tests. Profile self-test jobs (generate each profile,
-# then run its own check/test suite) join this workflow when the profiles
-# land; the docs check joins when the docs do.
 name: Main
 
 on:
@@ -31,13 +27,15 @@ jobs:
         run: make check
 
   tests:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.platform }}
     strategy:
-      # The bounds of requires-python; the full OS x Python matrix belongs to
-      # the python profile, not to the template's own integrity tests.
       matrix:
-        python-version: ["3.10", "3.14"]
+        platform: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
       fail-fast: false
+    defaults:
+      run:
+        shell: bash
     steps:
       - name: Check out
         uses: actions/checkout@v4
@@ -47,9 +45,16 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Run the template integrity tests
-        run: make test
+      - name: Run tests
+        run: uv run python -m pytest tests --cov --cov-config=pyproject.toml --cov-report=xml
 
+      - name: Check typing
+        run: uv run ty check
+      - name: Upload coverage reports to Codecov on Ubuntu / Python 3.12
+        uses: codecov/codecov-action@v4
+        if: ${{ matrix.platform == 'ubuntu-latest' && matrix.python-version == '3.12' }}
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
   check-docs:
     runs-on: ubuntu-latest
     steps:
@@ -62,10 +67,6 @@ jobs:
       - name: Check if documentation can be built
         run: make docs-test
 
-  # The self-test gate: generate every profile through the button path
-  # (full copy + make init) and run the generated repository's own check
-  # suite. A red profile blocks the merge, so no broken core ever reaches a
-  # grafted repository through an update.
   version-preview:
     # Show contributors what a merge would release, based on the conventional
     # commits on the branch. Pull requests only; informational.
@@ -129,12 +130,22 @@ jobs:
 
             <sub>Preview via python-semantic-release and conventional commits.</sub>
 
-  test-profiles:
+  # Continuous benchmarking with Bencher: pytest-benchmark produces the JSON,
+  # `bencher run` uploads it and comments the comparison against the base
+  # branch, using statistical boundary models instead of a fixed ratio.
+  #
+  # Setup: create a project at https://bencher.dev (free for public repos),
+  # then add the BENCHER_API_TOKEN secret and set BENCHER_PROJECT below. Until
+  # the secret exists the benchmarks still run and upload their results as an
+  # artifact; only the tracking step is skipped.
+  benchmark:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        profile: [python, schema]
-      fail-fast: false
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      BENCHER_PROJECT: oold-nutria
     steps:
       - name: Check out
         uses: actions/checkout@v4
@@ -142,41 +153,34 @@ jobs:
       - name: Set up the environment
         uses: ./.github/actions/setup-python-env
 
-      # The schema profile validates with ajv under Node; harmless for others.
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
+      - name: Run benchmarks
+        run: make bench
 
-      - name: Generate an instance (button path)
+      - name: Track benchmarks with Bencher
+        if: ${{ secrets.BENCHER_API_TOKEN != '' }}
+        uses: bencherdev/bencher@main
+
+      - name: Upload results to Bencher
+        if: ${{ secrets.BENCHER_API_TOKEN != '' }}
         run: |
-          instance="$RUNNER_TEMP/instance"
-          rsync -a --exclude .git --exclude .venv --exclude site ./ "$instance/"
-          cd "$instance"
-          uv run scripts/init.py --defaults \
-            --data profile=${{ matrix.profile }} \
-            --data project_name=selftest-repo \
-            --data owner=selftest-org \
-            --data description="Profile self-test"
-          git init -q && git add -A   # pre-commit and uv need a git work tree
+          bencher run \
+            --project "$BENCHER_PROJECT" \
+            --token "${{ secrets.BENCHER_API_TOKEN }}" \
+            --branch "$GITHUB_HEAD_REF" \
+            --start-point "$GITHUB_BASE_REF" \
+            --start-point-hash "${{ github.event.pull_request.base.sha }}" \
+            --start-point-clone-thresholds \
+            --start-point-reset \
+            --testbed ubuntu-latest \
+            --adapter python_pytest \
+            --err \
+            --github-actions "${{ secrets.GITHUB_TOKEN }}" \
+            --file benchmark_results.json
 
-      - name: Run the instance's own checks
-        run: |
-          cd "$RUNNER_TEMP/instance"
-          make install
-          make check
-          make test
-          make docs-test
-
-      # The instance must also pass the link check it ships with, otherwise
-      # every generated repository starts red on its first push.
-      - name: Check the instance's Markdown links
-        uses: lycheeverse/lychee-action@v2
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        if: always()
         with:
-          args: >-
-            --config "$RUNNER_TEMP/instance/lychee.toml" --no-progress
-            --exclude-path node_modules --exclude-path site
-            "$RUNNER_TEMP/instance/**/*.md"
-          fail: true
-          failIfEmpty: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: benchmark-results
+          path: benchmark_results.json
+          retention-days: 30

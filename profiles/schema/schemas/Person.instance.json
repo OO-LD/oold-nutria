@@ -1,6 +1,0 @@
-{
-  "@context": "Person.schema.json",
-  "name": "Ada Lovelace",
-  "email": "ada@example.org",
-  "knows": ["https://example.org/charles"]
-}

@@ -1,63 +1,59 @@
-# coregraft
+# oold-nutria
 
-🌿 Profiled GitHub template with full automation from commit to release, where the core keeps grafting forward into everything that grows from it.
+Python toolkit for oold schema packages on Supabase.
 
-`coregraft` is a GitHub template repository. Press **Use this template**, run `make init`, and you get a repository that already has linting, typing, tests, docs, versioning and releases wired together. When the template improves later, those improvements can be grafted back into repositories that were created from it.
+## Development
 
-## Use it
-
-Press **Use this template**, then:
+One command mirrors CI. Run it before every push:
 
 ```bash
-git clone https://github.com/<owner>/<repo>.git && cd <repo> && make init
+make ci
 ```
 
-`make init` asks for the profile, name, owner, license and optional extras, personalises the repository, removes what you did not ask for, and removes itself. No other tool to install.
+It runs these in order, and each is also usable on its own:
 
-That is the whole workflow. The only prerequisites are [uv](https://docs.astral.sh/uv/) and `make`; uv brings its own Python if none is installed.
-
-## Profiles
-
-| Profile | For | Brings |
-| --- | --- | --- |
-| `python` | Python packages | uv, hatchling, ruff, ty, pytest with coverage, PyPI publishing |
-| `schema` | JSON Schema and JSON-LD projects | schema validation, specification rendering, published schema artifacts |
-
-Profiles are overlays under `profiles/`. Adding another one later is additive and changes nothing that already exists.
-
-## What every repository gets
-
-| Area | Included |
+| Command | Does |
 | --- | --- |
-| Tasks | A self-documenting `Makefile`, so `make help` lists everything |
-| Quality | `pre-commit` with ruff, plus conventional commit messages enforced locally |
-| Versioning | `python-semantic-release`, so versions and the changelog follow from commit messages |
-| Docs | zensical, with versioned publishing so every release keeps its own documentation |
-| Links | Link checking on a schedule, with an ignore list for the unavoidable exceptions |
-| CI | A quality job, a test matrix and a release workflow |
+| `make check` | Lock file consistency, `pre-commit` on tracked and untracked files, `ty`, `deptry` |
+| `make test` | `pytest` with coverage |
+| `make docs-test` | Builds the documentation strictly, failing on any warning |
 
-Optional, chosen during `make init`: Dockerfile, dev container, benchmarks, `CITATION.cff` with Zenodo, code coverage reporting.
+Everything else, or `make help` for the full list:
 
-## Staying in sync
+| Command | Does |
+| --- | --- |
+| `make install` | Creates the environment and installs the git hooks |
+| `make docs` | Serves the documentation locally |
+| `make build` | Builds a wheel into `dist/` |
+| `make bench` | Runs the performance benchmarks |
+`make check` lints untracked files on purpose: `pre-commit run -a` skips them, which is how a new file passes locally and then fails in CI the moment it is committed.
 
-Every generated repository records which version of the template it came from. A maintenance workflow can later replay template changes into it as a pull request, so a fix made once here can reach every repository grown from it.
+Commits follow [Conventional Commits](https://www.conventionalcommits.org/); releases, the changelog and versioned documentation are automated on merge to main. Until a release App is configured, the release workflow skips itself instead of failing.
 
-## Releasing
+## Benchmarks
 
-Versions and the changelog come from your commit messages: on every merge to main, [python-semantic-release](https://python-semantic-release.readthedocs.io/) reads the Conventional Commits, bumps the version, updates `CHANGELOG.md`, tags, and publishes a GitHub release. `feat:` bumps the minor version, `fix:` the patch; `chore:`, `docs:`, `ci:` and `test:` release nothing.
+`make bench` runs the performance benchmarks in `tests/benchmarks/`. On pull requests they also run in CI and upload their results.
 
-One-time setup per repository:
+To track them over time, create a project on [Bencher](https://bencher.dev) (free for public repositories), add a `BENCHER_API_TOKEN` secret and set `BENCHER_PROJECT` in `.github/workflows/main.yml`. Bencher then comments each pull request with a statistical comparison against the base branch. Without the secret the benchmarks still run; only the tracking step is skipped.
 
-1. Create or reuse a GitHub App with **Contents: Read and write** permission (organizations typically share one release bot) and grant it access to the repository.
-2. Provide the secrets `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY`, as repository secrets or inherited organization secrets.
-3. Add a ruleset protecting `main` and list the App as allowed to bypass it, so the release commit and tag can be pushed while everyone else goes through pull requests.
+## Updates from the template
 
-Publishing to PyPI is optional and off by default. Repositories that enable it during `make init` publish via [trusted publishing](https://docs.pypi.org/trusted-publishers/) (OIDC, no token secret); configure the trusted publisher on PyPI once, pointing at the release workflow.
+This repository was generated from [coregraft](https://github.com/OO-LD/coregraft) and records which version in `.copier-answers.yml`. A weekly workflow checks whether the template has moved on and, if so, replays its changes here. Your own edits are preserved: copier re-applies them on top of the new template version rather than over it, and anything it cannot merge arrives as `<<<<<<<` conflict markers for a human to decide.
 
-## Status
+By default the update arrives as an **issue** naming the new version and the command to run:
 
-Early. The repository skeleton is in place and the profiles are being built. See the tracking issue for progress.
+```bash
+uvx copier update --skip-answered --trust --conflict inline
+```
 
-## License
+To get it as a **pull request** instead, this repository needs a GitHub App, because GitHub refuses to let the built-in token create or update anything under `.github/workflows/`, and template updates routinely do. One-time setup:
 
-Apache-2.0. Repositories created from this template choose their own license during `make init`.
+1. Use or create a GitHub App with **Contents: read and write**, **Pull requests: read and write** and **Workflows: read and write**. The last one is the whole point; without it the push is rejected. Organisations often already have a release App, which may need the Workflows permission added and the updated permission accepted on each installation.
+2. Install the App on this repository.
+3. Provide `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY` as repository secrets, or share the organisation secrets with this repository. Installing the App and sharing the secret are two separate settings.
+
+The workflow detects the secret at runtime, so it opens a pull request once the App is available and falls back to an issue when it is not. Either way the merge is the same; only the automation differs.
+
+---
+
+Generated from [coregraft](https://github.com/OO-LD/coregraft).

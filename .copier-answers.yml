@@ -1,0 +1,16 @@
+# Managed by copier / make init; refreshed on every update. Do not edit.
+_commit: v0.12.0
+_src_path: https://github.com/OO-LD/coregraft
+benchmarks: true
+citation: true
+codecov: true
+description: Python toolkit for oold schema packages on Supabase.
+devcontainer: true
+dockerfile: true
+license: none
+owner: OO-LD
+package_name: nutria
+profile: python
+project_name: oold-nutria
+pypi_publish: true
+update_bot: true

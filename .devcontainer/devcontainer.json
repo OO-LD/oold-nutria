@@ -1,5 +1,5 @@
 {
-  "name": "coregraft-example",
+  "name": "oold-nutria",
   "image": "mcr.microsoft.com/devcontainers/python:3.12",
   "features": {
     "ghcr.io/va-h/devcontainers-features/uv:1": { "version": "latest" }
@@ -9,7 +9,7 @@
     "vscode": {
       "extensions": ["ms-python.python", "charliermarsh.ruff", "tamasfe.even-better-toml"],
       "settings": {
-        "python.defaultInterpreterPath": "/workspaces/coregraft-example/.venv/bin/python",
+        "python.defaultInterpreterPath": "/workspaces/oold-nutria/.venv/bin/python",
         "editor.formatOnSave": true,
         "[python]": { "editor.defaultFormatter": "charliermarsh.ruff" }
       }

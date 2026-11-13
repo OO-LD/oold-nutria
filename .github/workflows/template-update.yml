@@ -67,7 +67,6 @@ jobs:
             echo "Already on $current."
           fi
 
-      # >>> update_bot
       - name: Generate app token
         id: app-token
         if: steps.check.outputs.outdated == 'true' && env.HAS_APP == 'true'
@@ -107,8 +106,6 @@ jobs:
             Review as you would any pull request; nothing here is applied automatically.
           labels: template-update
           delete-branch: true
-      # <<< update_bot
-
       # Fallback. Also covers the case where the bot is configured in the
       # template but the secret is missing here: a step that never ran has an
       # empty conclusion, so this still fires.
